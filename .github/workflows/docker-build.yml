@@ -9,11 +9,33 @@ on:
 env:
   AWS_REGION: us-east-1
   AWS_ENDPOINT_URL: http://localhost:5000
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
   ECR_REPOSITORY: fiap-todo-apijobs
 
 jobs:
+  validate-credentials:
+    name: Validador de Credenciais e Cofre (${{ matrix.scope }})
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        scope: [sts, ecr]
+    steps:
+      - name: Acessar GitHub Secrets e Testar Conexao Local
+        run: |
+          echo "[COFRE] Credenciais recuperadas com sucesso do GitHub Secrets."
+          echo "[VALIDACAO] Executando teste no escopo: ${{ matrix.scope }}"
+          if [ "${{ matrix.scope }}" = "sts" ]; then
+            aws sts get-caller-identity
+          elif [ "${{ matrix.scope }}" = "ecr" ]; then
+            aws ecr describe-repositories
+          fi
+          echo "[SUCESSO] Validacao ${{ matrix.scope }} aprovada no Moto Server."
+
   build-and-push:
     name: Build and Push to ECR
+    needs: validate-credentials
     runs-on: self-hosted
     
     steps:
@@ -23,15 +45,7 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Login to Amazon ECR Emulated
+      - name: Login to Amazon ECR
         id: login-ecr
         run: |
           aws ecr get-login-password | docker login --username AWS --password-stdin http://localhost:5000
