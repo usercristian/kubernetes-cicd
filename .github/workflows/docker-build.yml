@@ -12,55 +12,54 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-  ECR_REPOSITORY: fiap-todo-apijobs
+  ECR_REPOSITORY: fiap-todo-api
+  REGISTRY_URL: localhost:5000
 
 jobs:
   build-and-push:
-    name: Validação, Build e Push to ECR
+    name: Validacao, Build e Push com Podman
     runs-on: self-hosted
     
     steps:
       - name: Checkout codigo
         uses: actions/checkout@v4
       
-      - name: Pre-flight Check - Validar Credenciais e Cofre (STS + ECR)
+      - name: Pre-flight - Validar Credenciais
         run: |
-          echo "[COFRE] Credenciais recuperadas com sucesso do GitHub Secrets."
-          echo "[VALIDACAO] Executando teste de identidade (STS)..."
-          aws sts get-caller-identity
-          echo "[VALIDACAO] Executando teste de leitura do ECR..."
-          aws ecr describe-repositories
-          echo "[SUCESSO] Pre-flight Check aprovado no Moto Server."
+          echo "[COFRE] Credenciais carregadas na memoria do runner."
+          
+          if aws sts get-caller-identity > /dev/null 2>&1; then
+            echo "[SUCESSO] Identidade STS validada."
+          else
+            echo "[ERRO] Falha na autenticacao STS no Moto Server."
+            exit 1
+          fi
+          
+          if aws ecr describe-repositories > /dev/null 2>&1; then
+            echo "[SUCESSO] Leitura do repositorio ECR validada via API."
+          else
+            echo "[ERRO] Repositorio ECR nao encontrado no Moto Server."
+            exit 1
+          fi
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Amazon ECR Emulated
-        id: login-ecr
+      - name: Autenticar no ECR Emulated via Podman
         run: |
-          aws ecr get-login-password | docker login --username AWS --password-stdin http://localhost:5000
-          echo "registry=localhost:5000" >> $GITHUB_OUTPUT
-      
-      - name: Generate image tags
-        id: meta
+          aws ecr get-login-password | podman login --username AWS --password-stdin --tls-verify=false http://${{ env.REGISTRY_URL }}
+
+      - name: Build da imagem OCI nativa via Podman
         run: |
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest" >> $GITHUB_OUTPUT
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_OUTPUT
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      
-      - name: 🐳 Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          platforms: linux/amd64
-          provenance: false
-          sbom: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          podman build \
+            --tls-verify=false \
+            --tag ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:latest \
+            --tag ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            --tag ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }} \
+            --file ./Dockerfile .
+
+      - name: Push das tags para o ECR Emulated
+        run: |
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:latest
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }}
       
       - name: 🔍 Scan image
         continue-on-error: true
