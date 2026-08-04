@@ -3,7 +3,7 @@ name: 🐳 Docker Build and Push
 on:
   push:
     branches: [ main ]
-    # paths: [ 'app/**', 'Dockerfile' ]
+    paths: [ 'app/**', 'Dockerfile' ]
   workflow_dispatch:
 
 env:
@@ -15,37 +15,27 @@ env:
   ECR_REPOSITORY: fiap-todo-apijobs
 
 jobs:
-  validate-credentials:
-    name: Validador de Credenciais e Cofre (${{ matrix.scope }})
-    runs-on: self-hosted
-    strategy:
-      matrix:
-        scope: [sts, ecr]
-    steps:
-      - name: Acessar GitHub Secrets e Testar Conexao Local
-        run: |
-          echo "[COFRE] Credenciais recuperadas com sucesso do GitHub Secrets."
-          echo "[VALIDACAO] Executando teste no escopo: ${{ matrix.scope }}"
-          if [ "${{ matrix.scope }}" = "sts" ]; then
-            aws sts get-caller-identity
-          elif [ "${{ matrix.scope }}" = "ecr" ]; then
-            aws ecr describe-repositories
-          fi
-          echo "[SUCESSO] Validacao ${{ matrix.scope }} aprovada no Moto Server."
-
   build-and-push:
-    name: Build and Push to ECR
-    needs: validate-credentials
+    name: Validação, Build e Push to ECR
     runs-on: self-hosted
     
     steps:
       - name: Checkout codigo
         uses: actions/checkout@v4
       
+      - name: Pre-flight Check - Validar Credenciais e Cofre (STS + ECR)
+        run: |
+          echo "[COFRE] Credenciais recuperadas com sucesso do GitHub Secrets."
+          echo "[VALIDACAO] Executando teste de identidade (STS)..."
+          aws sts get-caller-identity
+          echo "[VALIDACAO] Executando teste de leitura do ECR..."
+          aws ecr describe-repositories
+          echo "[SUCESSO] Pre-flight Check aprovado no Moto Server."
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Login to Amazon ECR
+      - name: Login to Amazon ECR Emulated
         id: login-ecr
         run: |
           aws ecr get-login-password | docker login --username AWS --password-stdin http://localhost:5000
