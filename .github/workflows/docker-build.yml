@@ -13,38 +13,39 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
   ECR_REPOSITORY: fiap-todo-api
-  REGISTRY_URL: localhost:5000
+  REGISTRY_URL: localhost:5001
 
 jobs:
   build-and-push:
-    name: Validacao, Build e Push com Podman
+    name: Validacao, Build e Push com Podman e Registro OCI
     runs-on: self-hosted
     
     steps:
       - name: Checkout codigo
         uses: actions/checkout@v4
       
-      - name: Pre-flight - Validar Credenciais
+      - name: Pre-flight Check - Validar Credenciais de Forma Silenciosa
         run: |
           echo "[COFRE] Credenciais carregadas na memoria do runner."
           
           if aws sts get-caller-identity > /dev/null 2>&1; then
-            echo "[SUCESSO] Identidade STS validada."
+            echo "[SUCESSO] Identidade STS validada sem expor metadados."
           else
-            echo "[ERRO] Falha na autenticacao STS no Moto Server."
+            echo "[ERRO] Falha na autenticacao STS no Moto Server (porta 5000)."
             exit 1
           fi
           
           if aws ecr describe-repositories > /dev/null 2>&1; then
             echo "[SUCESSO] Leitura do repositorio ECR validada via API."
           else
-            echo "[ERRO] Repositorio ECR nao encontrado no Moto Server."
+            echo "[ERRO] Repositorio ECR nao encontrado no Moto Server (porta 5000)."
             exit 1
           fi
 
-      - name: Autenticar no ECR Emulated via Podman
+      - name: Validar Geracao de Token ECR
         run: |
-          aws ecr get-login-password | podman login --username AWS --password-stdin --tls-verify=false http://${{ env.REGISTRY_URL }}
+          aws ecr get-login-password > /dev/null
+          echo "[SUCESSO] Token ECR gerado com sucesso pelo Moto Server."
 
       - name: Build da imagem OCI nativa via Podman
         run: |
@@ -55,12 +56,12 @@ jobs:
             --tag ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }} \
             --file ./Dockerfile .
 
-      - name: Push das tags para o ECR Emulated
+      - name: Push das tags para o Registro OCI Local
         run: |
           podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:latest
           podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }}
-      
+
       - name: 🔍 Scan image
         continue-on-error: true
         run: |
