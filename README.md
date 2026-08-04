@@ -17,3 +17,5 @@
 - **Sessão**: Renovar credenciais quando a sessão do Learner Lab expirar
 - **Limpeza**: Sempre deletar recursos após a aula para preservar o budget
 - **Secrets**: Nunca commitar credenciais no código
+
+**Yml Adaptado para rodar localmente no motoserver + minikube** para não ter custos com nuvem no aprendizado.
