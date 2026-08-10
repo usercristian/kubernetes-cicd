@@ -1,3 +1,11 @@
+name: 🐳 Docker Build and Push
+
+on:
+  push:
+    branches: [ main ]
+    # paths: [ 'app/**', 'Dockerfile' ]
+  workflow_dispatch:
+
 env:
   AWS_REGION: us-east-1
   AWS_ENDPOINT_URL: http://localhost:5000
@@ -41,3 +49,27 @@ jobs:
           minikube image load ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:latest
           minikube image load ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           echo "[SUCESSO] Imagens carregadas no cluster local."
+
+      - name: Push das tags para o Registro OCI Local
+        run: |
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:latest
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }}
+
+      - name: 🔍 Scan image
+        continue-on-error: true
+        run: |
+          aws ecr start-image-scan \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-id imageTag=latest \
+            --region ${{ env.AWS_REGION }} || echo " Image scan not supported for this image type"
+      
+      - name: Summary
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: ${{ env.ECR_REPOSITORY }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags**:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`v1.${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
