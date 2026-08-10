@@ -34,7 +34,7 @@ jobs:
         working-directory: k8s/overlays/production
         run: |
           kustomize edit set image \
-            ${{ secrets.ECR_URI }}/fiap-todo-api:${{ github.sha }}
+            fiap-todo-api=${{ secrets.ECR_URI }}/fiap-todo-api:${{ github.sha }}
       
       - name: Deploy to Kubernetes
         run: |
