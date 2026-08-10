@@ -43,13 +43,22 @@ jobs:
             --tag ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             --file ./Dockerfile .
 
+      - name: Exportar imagem para arquivo fisico
+        run: |
+          echo "Exportando imagem do Podman para arquivo tar..."
+          podman save -o image.tar ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:latest ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          echo "[SUCESSO] Arquivo image.tar gerado."
+
       - name: Load da imagem para o cache do Minikube
         run: |
-          echo "Injetando a imagem com URI do ECR no Minikube..."
-          minikube image load ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:latest
-          minikube image load ${{ env.ECR_URI }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          echo "Injetando a imagem a partir do arquivo fisico no Minikube..."
+          minikube image load image.tar
           echo "[SUCESSO] Imagens carregadas no cluster local."
-
+          
+      - name: Limpar artefato temporario
+        run: |
+          rm -f image.tar
+          
       - name: Push das tags para o Registro OCI Local
         run: |
           podman push --tls-verify=false ${{ env.REGISTRY_URL }}/${{ env.ECR_REPOSITORY }}:latest
