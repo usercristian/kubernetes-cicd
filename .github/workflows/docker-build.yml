@@ -38,7 +38,7 @@ jobs:
           if aws ecr describe-repositories > /dev/null 2>&1; then
             echo "[SUCESSO] Leitura do repositorio ECR validada via API."
           else
-            echo "[ERRO] Repositorio ECR nao encontrado no Moto Server (porta 5000)."
+            echo "[ERRO] Repositorio ECR não encontrado."
             exit 1
           fi
 
